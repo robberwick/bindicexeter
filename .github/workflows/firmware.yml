@@ -40,9 +40,11 @@ jobs:
           cd .pio/build/esp32-s3
           # Offsets come from the Arduino default 4 MB partition table used by
           # board_build.flash_size = 4MB; update them if the layout changes.
+          # The bootloader header must stay dio: the ROM loads it before the QE
+          # bit is set, and a qio header boot-loops with TG0WDT_SYS_RST.
           pio pkg exec -p tool-esptoolpy -- esptool.py --chip esp32s3 merge_bin \
             -o "$GITHUB_WORKSPACE/out/firmware.bin" \
-            --flash_mode qio --flash_freq 80m --flash_size 4MB \
+            --flash_mode dio --flash_freq 80m --flash_size 4MB \
             0x0 bootloader.bin \
             0x8000 partitions.bin \
             0xe000 "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" \
