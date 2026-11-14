@@ -20,6 +20,11 @@
 <body>
 <h1>bindicexeter flasher</h1>
 <p>Wemos S3 Mini (ESP32-S3, 4&nbsp;MB). Needs Chrome or Edge on a desktop &mdash; Web Serial is not available in Firefox or Safari.</p>
+<p id="support" class="muted" hidden>
+  <strong>This browser has no Web Serial, so it cannot flash or monitor the board.</strong>
+  Use Chrome or Edge on a desktop. The install widget's &ldquo;Mozilla Firefox&rdquo; wording is stale: Firefox does
+  not support Web Serial, at any version.
+</p>
 
 <h2>1. Install firmware</h2>
 <ol>
@@ -66,6 +71,13 @@
 <script>
   const installer = document.getElementById('installer');
   const input = document.getElementById('ref');
+
+  if (!('serial' in navigator)) {
+    document.getElementById('support').hidden = false;
+    installer.hidden = true;
+    document.getElementById('send').disabled = true;
+    document.getElementById('monitor').disabled = true;
+  }
 
   function apply() {
     const ref = input.value.trim().replace(/^\/+|\/+$/g, '') || 'main';
