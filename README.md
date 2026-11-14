@@ -78,6 +78,27 @@ Run the parser tests on the host (no hardware needed):
 pio test -e native
 ```
 
+## Flash a GitHub build (no toolchain, no checkout)
+
+Every push to `main`, every pull request and every `v*` tag is built by `.github/workflows/firmware.yml`.
+Branches, tags and PRs from this repository are published to GitHub Pages:
+<https://robberwick.github.io/bindicexeter/>. Open that page in Chrome or Edge on
+the Windows laptop (Web Serial needs Chromium), choose the build (`main`, `pr-123`, a branch or tag name),
+plug in the board and press Install.
+
+The published image is the bootloader, partition table and app merged into one file written at `0x0`, so
+LittleFS (and the WiFi/UPRN config on it) is left alone. Leave "Erase device" unchecked in the install dialog
+to keep it.
+
+Caveats:
+
+- The flasher page is static HTML (`flasher/index.html`) plus one `<ref>/` directory on the `gh-pages` branch.
+  One-time repo setup: Settings > Pages > Deploy from a branch > `gh-pages` / `(root)`.
+- Pull requests from forks can only push an artifact (read-only token); download `firmware.bin` from the run
+  and flash it with `esptool.py --chip esp32s3 write_flash 0x0 firmware.bin`.
+- The merged image does not create a filesystem, so a blank board still needs `pio run -e esp32-s3 -t uploadfs`
+  once from a machine with PlatformIO.
+
 ## Behaviour
 
 Boot: mount LittleFS, load config, join WiFi, sync NTP, fetch the JSON, parse the `Results` fragment, draw, hibernate,

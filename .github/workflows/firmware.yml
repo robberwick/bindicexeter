@@ -1,0 +1,110 @@
+name: firmware
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('platformio.ini') }}
+
+      - run: pip install platformio
+
+      - name: Host tests
+        run: pio test -e native
+
+      - name: Build
+        run: pio run -e esp32-s3
+
+      - name: Merge into one flash image
+        run: |
+          mkdir -p out
+          cd .pio/build/esp32-s3
+          # Offsets come from the Arduino default 4 MB partition table used by
+          # board_build.flash_size = 4MB; update them if the layout changes.
+          pio pkg exec -p tool-esptoolpy -- esptool.py --chip esp32s3 merge_bin \
+            -o "$GITHUB_WORKSPACE/out/firmware.bin" \
+            --flash_mode qio --flash_freq 80m --flash_size 4MB \
+            0x0 bootloader.bin \
+            0x8000 partitions.bin \
+            0xe000 "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" \
+            0x10000 firmware.bin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: out/firmware.bin
+
+  publish:
+    needs: build
+    # Fork pull requests get a read-only token, so only the artifact is produced.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: out
+
+      - name: Publish build to gh-pages
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          REF="${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}"
+          REF="${REF//\//-}"
+
+          rm -rf site
+          if ! git clone -q --depth 1 --branch gh-pages "https://x-access-token:${TOKEN}@github.com/${REPO}.git" site; then
+            mkdir site
+            git -C site init -q -b gh-pages
+            git -C site remote add origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+          fi
+
+          mkdir -p "site/${REF}"
+          cp out/firmware.bin "site/${REF}/firmware.bin"
+          cp flasher/index.html site/index.html
+          cat > "site/${REF}/manifest.json" <<EOF
+          {
+            "name": "bindicexeter ${REF}",
+            "version": "${SHA:0:7}",
+            "new_install_prompt_erase": true,
+            "builds": [
+              {
+                "chipFamily": "ESP32-S3",
+                "parts": [{ "path": "firmware.bin", "offset": 0 }]
+              }
+            ]
+          }
+          EOF
+
+          git -C site add -A
+          git -C site -c user.name=github-actions -c user.email=actions@github.com \
+            commit -q -m "${REF} @ ${SHA:0:7}"
+          git -C site push -q origin gh-pages
