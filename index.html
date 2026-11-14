@@ -8,32 +8,38 @@
   body { font: 16px/1.5 system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; }
   .muted { opacity: 0.7; }
   input { font: inherit; }
-  fieldset { margin: 1.5rem 0; }
+  h2 { margin-top: 2rem; }
+  fieldset { margin: 0; }
   fieldset label { display: block; margin: 0.4rem 0; }
+  #status { min-height: 1.5rem; }
 </style>
 <script type="module" src="https://unpkg.com/esp-web-tools@10.5.2/dist/web/install-button.js?module"></script>
 </head>
 <body>
 <h1>bindicexeter flasher</h1>
 <p>Wemos S3 Mini (ESP32-S3, 4&nbsp;MB). Needs Chrome or Edge on a desktop &mdash; Web Serial is not available in Firefox or Safari.</p>
+
+<h2>1. Install firmware</h2>
+<ol>
+  <li>Plug the board in with a USB data cable.</li>
+  <li>Press <strong>Install</strong> and pick the serial port.</li>
+  <li>Leave &ldquo;Erase device&rdquo; unchecked to keep an existing config; tick it to wipe the config and start over.</li>
+</ol>
 <p>
-  <label>Build <input id="ref" size="16" spellcheck="false" autocomplete="off"></label>
+  Build <input id="ref" size="16" spellcheck="false" autocomplete="off">
   <button id="apply">Use build</button>
-</p>
-<p class="muted">
-  e.g. <a href="?ref=main">main</a> or <a href="?ref=pr-123">pr-123</a>.
-  Leave &ldquo;Erase device&rdquo; unchecked in the dialog to keep the WiFi/UPRN config already on the board;
-  the image only writes the bootloader, partition table and app.
+  <span class="muted">e.g. <a href="?ref=main">main</a>, <a href="?ref=pr-123">pr-123</a></span>
 </p>
 <esp-web-install-button id="installer"></esp-web-install-button>
+<p class="muted">The install dialog shows the build version. If it is not the one you expected, reload this page.</p>
 
+<h2>2. Send device config</h2>
+<p>
+  Only after a first install or an erase: the board restarts, formats its filesystem and waits up to five minutes
+  for this form. Fill it in and press <strong>Send config over USB</strong>; the board replies
+  &ldquo;OK config.json saved&rdquo; and carries on booting. On later firmware updates, skip this step.
+</p>
 <fieldset>
-  <legend>Device config</legend>
-  <p class="muted">
-    A blank board has no filesystem: after installing, the firmware formats one and waits up to two minutes
-    on USB serial for this form. To change the config later, install again with &ldquo;Erase device&rdquo;
-    checked, then send it here.
-  </p>
   <label>WiFi SSID <input id="ssid" autocomplete="off"></label>
   <label>WiFi password <input id="password" type="password" autocomplete="off"></label>
   <label>UPRN <input id="uprn" inputmode="numeric" autocomplete="off"></label>
@@ -41,6 +47,10 @@
   <button id="send">Send config over USB</button>
   <p id="status" class="muted"></p>
 </fieldset>
+<p class="muted">
+  No reply? Press the board's RST button, then send again. A board that already has a config does not wait, so
+  tick &ldquo;Erase device&rdquo; in step 1 first if you want to change it.
+</p>
 
 <script>
   const installer = document.getElementById('installer');
@@ -48,7 +58,8 @@
 
   function apply() {
     const ref = input.value.trim().replace(/^\/+|\/+$/g, '') || 'main';
-    installer.manifest = `${ref}/manifest.json`;
+    // The timestamp keeps a previously cached manifest/build from being reused.
+    installer.manifest = `${ref}/manifest.json?t=${Date.now()}`;
     history.replaceState(null, '', `?ref=${encodeURIComponent(ref)}`);
   }
 
