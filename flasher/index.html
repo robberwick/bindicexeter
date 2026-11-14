@@ -19,11 +19,12 @@
 </head>
 <body>
 <h1>bindicexeter flasher</h1>
-<p>Wemos S3 Mini (ESP32-S3, 4&nbsp;MB). Needs Chrome or Edge on a desktop &mdash; Web Serial is not available in Firefox or Safari.</p>
+<p>Wemos S3 Mini (ESP32-S3, 4&nbsp;MB). Needs Web Serial on a desktop: Chrome, Edge, or Firefox 151+. Safari has none.</p>
 <p id="support" class="muted" hidden>
-  <strong>This browser has no Web Serial, so it cannot flash or monitor the board.</strong>
-  Use Chrome or Edge on a desktop. The install widget's &ldquo;Mozilla Firefox&rdquo; wording is stale: Firefox does
-  not support Web Serial, at any version.
+  <strong>This browser exposes no Web Serial, so it cannot flash or monitor the board.</strong>
+  Firefox 151+ has it; if it is missing here, check <code>about:config</code> &rarr; <code>dom.webserial.enabled</code>
+  and <code>about:policies</code> (enterprise policy <code>DefaultSerialGuardSetting</code>). Chrome or Edge always
+  work. <span id="ua"></span>
 </p>
 
 <h2>1. Install firmware</h2>
@@ -74,6 +75,7 @@
 
   if (!('serial' in navigator)) {
     document.getElementById('support').hidden = false;
+    document.getElementById('ua').textContent = `Detected: ${navigator.userAgent}`;
     installer.hidden = true;
     document.getElementById('send').disabled = true;
     document.getElementById('monitor').disabled = true;
@@ -114,7 +116,7 @@
   document.getElementById('send').addEventListener('click', async () => {
     const status = document.getElementById('status');
     if (!('serial' in navigator)) {
-      status.textContent = 'This browser has no Web Serial; use Chrome or Edge.';
+      status.textContent = 'This browser exposes no Web Serial (Chrome, Edge, Firefox 151+).';
       return;
     }
 
@@ -196,7 +198,7 @@
       return;
     }
     if (!('serial' in navigator)) {
-      append('This browser has no Web Serial; use Chrome or Edge.\n');
+      append('This browser exposes no Web Serial (Chrome, Edge, Firefox 151+).\n');
       return;
     }
     try {
