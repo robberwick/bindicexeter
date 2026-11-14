@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>bindicexeter flasher</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; }
+  .muted { opacity: 0.7; }
+  input { font: inherit; }
+</style>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.5.2/dist/web/install-button.js?module"></script>
+</head>
+<body>
+<h1>bindicexeter flasher</h1>
+<p>Wemos S3 Mini (ESP32-S3, 4&nbsp;MB). Needs Chrome or Edge on a desktop &mdash; Web Serial is not available in Firefox or Safari.</p>
+<p>
+  <label>Build <input id="ref" size="16" spellcheck="false" autocomplete="off"></label>
+  <button id="apply">Use build</button>
+</p>
+<p class="muted">
+  e.g. <a href="?ref=main">main</a> or <a href="?ref=pr-123">pr-123</a>.
+  Leave &ldquo;Erase device&rdquo; unchecked in the dialog: this image only writes the bootloader,
+  partition table and app, so the WiFi/UPRN config in LittleFS survives.
+</p>
+<esp-web-install-button id="installer"></esp-web-install-button>
+<script>
+  const installer = document.getElementById('installer');
+  const input = document.getElementById('ref');
+
+  function apply() {
+    const ref = input.value.trim().replace(/^\/+|\/+$/g, '') || 'main';
+    installer.manifest = `${ref}/manifest.json`;
+    history.replaceState(null, '', `?ref=${encodeURIComponent(ref)}`);
+  }
+
+  input.value = new URLSearchParams(location.search).get('ref') || 'main';
+  apply();
+  input.addEventListener('change', apply);
+  document.getElementById('apply').addEventListener('click', apply);
+</script>
+</body>
+</html>
