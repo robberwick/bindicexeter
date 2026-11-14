@@ -91,7 +91,7 @@ The published image is the bootloader, partition table and app merged into one f
 existing LittleFS (and the WiFi/UPRN config on it) is left alone. Leave "Erase device" unchecked in the install
 dialog to keep it.
 
-On a blank board there is no filesystem: the firmware formats one on first boot and then waits up to two minutes
+On a blank board there is no filesystem: the firmware formats one on first boot and then waits up to five minutes
 on USB serial for config. Fill in the "Device config" form on the same page and press "Send config over USB" — the
 board saves it and carries on booting. To change the config later, install again with "Erase device" checked and
 send it again. No `uploadfs`, esptool or checkout needed.

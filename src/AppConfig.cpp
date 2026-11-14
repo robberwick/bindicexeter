@@ -7,7 +7,7 @@ namespace {
 
 // A browser install writes no filesystem, so the firmware formats one on first
 // boot and then takes the config from USB serial (the flasher page's form).
-constexpr uint32_t kSerialConfigWaitMs = 120000;
+constexpr uint32_t kSerialConfigWaitMs = 300000;
 constexpr size_t kMaxConfigLineBytes = 2048;
 
 bool applyConfig(const JsonDocument& doc, AppConfig& config, String& error) {
