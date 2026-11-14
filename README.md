@@ -4,8 +4,8 @@ Exeter City Council bin collection display firmware for a Wemos/LOLIN S3 Mini (E
 PSRAM) driving a 2.9" GDEM029C90 tri-colour e-paper panel (128x296).
 
 The device fetches the council's own bin-date data, parses the HTML fragment it returns, and draws the schedule on
-the panel. There is no server, no API key, no WiFiManager portal and no OTA. Configuration lives in a LittleFS file.
-Between updates the ESP32 deep-sleeps.
+the panel. There is no server, no API key, no WiFiManager portal and no OTA. Configuration lives in a LittleFS file,
+or arrives over USB serial on first boot. Between updates the ESP32 deep-sleeps.
 
 Data source (UPRN lookup, JSON array with an HTML `Results` fragment):
 
@@ -50,7 +50,8 @@ cp data/config.example.json data/config.json
 }
 ```
 
-`data/config.json` is git-ignored and is uploaded to LittleFS, never compiled in.
+`data/config.json` is git-ignored and is uploaded to LittleFS, never compiled in. The same JSON can be sent over
+USB serial (see below) instead of building a filesystem image.
 
 - `uprn` - the Unique Property Reference Number for the address, 10-15 digits.
 - `production_mode` - `true` sleeps for 3 hours between updates; `false` sleeps 20 seconds for bench testing and adds
@@ -86,9 +87,14 @@ Branches, tags and PRs from this repository are published to GitHub Pages:
 the Windows laptop (Web Serial needs Chromium), choose the build (`main`, `pr-123`, a branch or tag name),
 plug in the board and press Install.
 
-The published image is the bootloader, partition table and app merged into one file written at `0x0`, so
-LittleFS (and the WiFi/UPRN config on it) is left alone. Leave "Erase device" unchecked in the install dialog
-to keep it.
+The published image is the bootloader, partition table and app merged into one file written at `0x0`, so an
+existing LittleFS (and the WiFi/UPRN config on it) is left alone. Leave "Erase device" unchecked in the install
+dialog to keep it.
+
+On a blank board there is no filesystem: the firmware formats one on first boot and then waits up to two minutes
+on USB serial for config. Fill in the "Device config" form on the same page and press "Send config over USB" — the
+board saves it and carries on booting. To change the config later, install again with "Erase device" checked and
+send it again. No `uploadfs`, esptool or checkout needed.
 
 Caveats:
 
@@ -96,8 +102,6 @@ Caveats:
   One-time repo setup: Settings > Pages > Deploy from a branch > `gh-pages` / `(root)`.
 - Pull requests from forks can only push an artifact (read-only token); download `firmware.bin` from the run
   and flash it with `esptool.py --chip esp32s3 write_flash 0x0 firmware.bin`.
-- The merged image does not create a filesystem, so a blank board still needs `pio run -e esp32-s3 -t uploadfs`
-  once from a machine with PlatformIO.
 
 ## Behaviour
 
