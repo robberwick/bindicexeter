@@ -12,6 +12,8 @@
   fieldset { margin: 0; }
   fieldset label { display: block; margin: 0.4rem 0; }
   #status { min-height: 1.5rem; }
+  #log { font: 12px/1.4 ui-monospace, monospace; background: transparent; color: inherit;
+         border: 1px solid currentColor; padding: 0.5rem; height: 14rem; overflow: auto; white-space: pre-wrap; }
 </style>
 <script type="module" src="https://unpkg.com/esp-web-tools@10.5.2/dist/web/install-button.js?module"></script>
 </head>
@@ -51,6 +53,15 @@
   No reply? Press the board's RST button, then send again. A board that already has a config does not wait, so
   tick &ldquo;Erase device&rdquo; in step 1 first if you want to change it.
 </p>
+
+<h2>Serial monitor (optional)</h2>
+<p class="muted">
+  The board powers USB down while it deep-sleeps, so the port comes and goes; this monitor reconnects by itself.
+  Output appears only while the board is awake: every 20&nbsp;s with production mode off, every 3&nbsp;h with it on.
+  Close the install dialog first &mdash; one program can hold the port.
+</p>
+<button id="monitor">Start monitor</button>
+<pre id="log"></pre>
 
 <script>
   const installer = document.getElementById('installer');
@@ -123,6 +134,69 @@
     } finally {
       if (port) await port.close().catch(() => {});
     }
+  });
+
+  const monitorButton = document.getElementById('monitor');
+  const log = document.getElementById('log');
+  let monitorPort;
+  let monitorReader;
+  let monitorStop;
+
+  function append(text) {
+    log.textContent += text;
+    if (log.textContent.length > 20000) log.textContent = log.textContent.slice(-20000);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function runMonitor() {
+    let waiting = false;
+    while (!monitorStop) {
+      try {
+        await monitorPort.open({ baudRate: 115200 });
+        waiting = false;
+        append('Connected.\n');
+        const reader = monitorPort.readable.getReader();
+        monitorReader = reader;
+        const decoder = new TextDecoder();
+        while (!monitorStop) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          append(decoder.decode(value, { stream: true }));
+        }
+        monitorReader = undefined;
+        await reader.cancel().catch(() => {});
+      } catch (e) {
+        if (!waiting) append('Waiting for the board...\n');
+        waiting = true;
+      }
+      await monitorPort.close().catch(() => {});
+      if (!monitorStop) await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    await monitorPort.close().catch(() => {});
+    append('Monitor stopped.\n');
+    monitorButton.textContent = 'Start monitor';
+  }
+
+  monitorButton.addEventListener('click', async () => {
+    if (monitorStop) {
+      monitorStop = true;
+      if (monitorReader) await monitorReader.cancel().catch(() => {});
+      return;
+    }
+    if (!('serial' in navigator)) {
+      append('This browser has no Web Serial; use Chrome or Edge.\n');
+      return;
+    }
+    try {
+      monitorPort = await navigator.serial.requestPort();
+    } catch (e) {
+      append(`No port selected: ${e.message}\n`);
+      return;
+    }
+    monitorStop = false;
+    monitorButton.textContent = 'Stop monitor';
+    append('Connecting...\n');
+    runMonitor();
   });
 </script>
 </body>
