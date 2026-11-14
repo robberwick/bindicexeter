@@ -37,6 +37,17 @@ String headerText(const Collection& collection, bool haveClock) {
   return "IN " + String(days) + " DAYS - " + dateShort;
 }
 
+String footerText(bool haveClock, const char* updated, bool production) {
+  if (haveClock && updated != nullptr && updated[0] != '\0') {
+    String footer = "Updated " + String(updated);
+    if (!production) {
+      footer += " DEV";
+    }
+    return footer;
+  }
+  return haveClock ? "" : "Clock not synced";
+}
+
 }  // namespace
 
 DisplayManager& DisplayManager::getInstance() {
@@ -86,10 +97,6 @@ String DisplayManager::fitText(const String& text, int16_t maxWidth) const {
 
 void DisplayManager::showSchedule(const std::vector<Collection>& bins, bool haveClock, const char* updated,
                                   bool production) {
-  if (display == nullptr) {
-    return;
-  }
-
   std::vector<Collection> sorted = bins;
   std::stable_sort(sorted.begin(), sorted.end(), [haveClock](const Collection& a, const Collection& b) {
     if (groupKey(a, haveClock) != groupKey(b, haveClock)) {
@@ -97,6 +104,23 @@ void DisplayManager::showSchedule(const std::vector<Collection>& bins, bool have
     }
     return a.rank < b.rank;
   });
+
+  // Mirror the panel contents on serial, so the schedule can be checked without a display attached.
+  Serial.println("Schedule:");
+  for (size_t index = 0; index < sorted.size();) {
+    const int key = groupKey(sorted[index], haveClock);
+    Serial.println(headerText(sorted[index], haveClock));
+    while (index < sorted.size() && groupKey(sorted[index], haveClock) == key) {
+      Serial.print("  ");
+      Serial.println(sorted[index].binLabel.c_str());
+      ++index;
+    }
+  }
+  Serial.println(footerText(haveClock, updated, production));
+
+  if (display == nullptr) {
+    return;
+  }
 
   const int16_t panelWidth = display->width();
   const int16_t panelHeight = display->height();
@@ -156,15 +180,7 @@ void DisplayManager::showSchedule(const std::vector<Collection>& bins, bool have
     display->setFont(nullptr);
     display->setTextColor(GxEPD_BLACK);
     display->setCursor(kLeftMargin, panelHeight - 3);
-    if (haveClock && updated != nullptr && updated[0] != '\0') {
-      String footer = "Updated " + String(updated);
-      if (!production) {
-        footer += " DEV";
-      }
-      display->print(fitText(footer, usableWidth));
-    } else if (!haveClock) {
-      display->print(fitText("Clock not synced", usableWidth));
-    }
+    display->print(fitText(footerText(haveClock, updated, production), usableWidth));
   } while (display->nextPage());
 }
 

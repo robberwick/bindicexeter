@@ -56,7 +56,6 @@ void setup() {
   std::tm now = {};
   const bool haveClock = syncClock(now, error);
   if (!haveClock) {
-    Serial.print("NTP failed: ");
     Serial.println(error);
   }
 
