@@ -1,11 +1,11 @@
 {
   "name": "bindicexeter main",
-  "version": "3dbec96",
+  "version": "59c8e0b",
   "new_install_prompt_erase": true,
   "builds": [
     {
       "chipFamily": "ESP32-S3",
-      "parts": [{ "path": "firmware.bin?v=3dbec96", "offset": 0 }]
+      "parts": [{ "path": "firmware.bin?v=59c8e0b", "offset": 0 }]
     }
   ]
 }
