@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>bindicexeter flasher</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; }
+  .muted { opacity: 0.7; }
+  input { font: inherit; }
+  h2 { margin-top: 2rem; }
+  fieldset { margin: 0; }
+  fieldset label { display: block; margin: 0.4rem 0; }
+  #status { min-height: 1.5rem; }
+  #log { font: 12px/1.4 ui-monospace, monospace; background: transparent; color: inherit;
+         border: 1px solid currentColor; padding: 0.5rem; height: 14rem; overflow: auto; white-space: pre-wrap; }
+</style>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.5.2/dist/web/install-button.js?module"></script>
+</head>
+<body>
+<h1>bindicexeter flasher</h1>
+<p>Wemos S2 Mini (ESP32-S2), 4&nbsp;MB flash. Needs Web Serial on a desktop: Chrome, Edge, or Firefox 151+. Safari has none.</p>
+<p id="support" class="muted" hidden>
+  <strong>This browser exposes no Web Serial, so it cannot flash or monitor the board.</strong>
+  Firefox 151+ has it; if it is missing here, check <code>about:config</code> &rarr; <code>dom.webserial.enabled</code>
+  and <code>about:policies</code> (enterprise policy <code>DefaultSerialGuardSetting</code>). Chrome or Edge always
+  work. <span id="ua"></span>
+</p>
+
+<h2>1. Install firmware</h2>
+<ol>
+  <li>Plug the board in with a USB data cable.</li>
+  <li>Press <strong>Install</strong> and pick the serial port.</li>
+  <li>Leave &ldquo;Erase device&rdquo; unchecked to keep an existing config; tick it to wipe the config and start over.</li>
+</ol>
+<p>
+  Build <input id="ref" size="16" spellcheck="false" autocomplete="off">
+  <button id="apply">Use build</button>
+  <span class="muted">e.g. <a href="?ref=main">main</a>, <a href="?ref=pr-123">pr-123</a></span>
+</p>
+<esp-web-install-button id="installer"></esp-web-install-button>
+<p class="muted">The install dialog shows the build version. If it is not the one you expected, reload this page.</p>
+
+<h2>2. Send device config</h2>
+<p>
+  Only after a first install or an erase: the board restarts, formats its filesystem and waits up to five minutes
+  for this form. Fill it in and press <strong>Send config over USB</strong>; the board replies
+  &ldquo;OK config.json saved&rdquo; and carries on booting. On later firmware updates, skip this step.
+</p>
+<fieldset>
+  <label>WiFi SSID <input id="ssid" autocomplete="off"></label>
+  <label>WiFi password <input id="password" type="password" autocomplete="off"></label>
+  <label>UPRN <input id="uprn" inputmode="numeric" autocomplete="off"></label>
+  <label><input id="production" type="checkbox" checked> production mode (3 h sleep; otherwise 20 s)</label>
+  <button id="send">Send config over USB</button>
+  <p id="status" class="muted"></p>
+</fieldset>
+<p class="muted">
+  No reply? Press the board's RST button, then send again. A board that already has a config does not wait, so
+  tick &ldquo;Erase device&rdquo; in step 1 first if you want to change it.
+</p>
+
+<h2>Serial monitor (optional)</h2>
+<p class="muted">
+  The board powers USB down while it deep-sleeps, so the port comes and goes; this monitor reconnects by itself.
+  Output appears only while the board is awake: every 20&nbsp;s with production mode off, every 3&nbsp;h with it on.
+  Close the install dialog first &mdash; one program can hold the port.
+</p>
+<button id="monitor">Start monitor</button>
+<pre id="log"></pre>
+
+<script>
+  const installer = document.getElementById('installer');
+  const input = document.getElementById('ref');
+
+  if (!('serial' in navigator)) {
+    document.getElementById('support').hidden = false;
+    document.getElementById('ua').textContent = `Detected: ${navigator.userAgent}`;
+    installer.hidden = true;
+    document.getElementById('send').disabled = true;
+    document.getElementById('monitor').disabled = true;
+  }
+
+  function apply() {
+    const ref = input.value.trim().replace(/^\/+|\/+$/g, '') || 'main';
+    // The timestamp keeps a previously cached manifest/build from being reused.
+    installer.manifest = `${ref}/manifest.json?t=${Date.now()}`;
+    history.replaceState(null, '', `?ref=${encodeURIComponent(ref)}`);
+  }
+
+  input.value = new URLSearchParams(location.search).get('ref') || 'main';
+  apply();
+  input.addEventListener('change', apply);
+  document.getElementById('apply').addEventListener('click', apply);
+
+  async function readReply(port) {
+    const reader = port.readable.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    const deadline = performance.now() + 3000;
+    try {
+      while (performance.now() < deadline && !text.includes('\n')) {
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise(resolve => setTimeout(() => resolve(null), Math.max(0, deadline - performance.now()))),
+        ]);
+        if (!chunk || chunk.done) break;
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+    }
+    return text.trim();
+  }
+
+  document.getElementById('send').addEventListener('click', async () => {
+    const status = document.getElementById('status');
+    if (!('serial' in navigator)) {
+      status.textContent = 'This browser exposes no Web Serial (Chrome, Edge, Firefox 151+).';
+      return;
+    }
+
+    const ssid = document.getElementById('ssid').value.trim();
+    const uprn = document.getElementById('uprn').value.trim();
+    if (!ssid || !uprn) {
+      status.textContent = 'SSID and UPRN are required.';
+      return;
+    }
+
+    const payload = JSON.stringify({
+      wifi_ssid: ssid,
+      wifi_password: document.getElementById('password').value,
+      uprn,
+      production_mode: document.getElementById('production').checked,
+    }) + '\n';
+
+    let port;
+    try {
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
+      const writer = port.writable.getWriter();
+      await writer.write(new TextEncoder().encode(payload));
+      writer.releaseLock();
+      const reply = await readReply(port);
+      status.textContent = reply || 'Sent, but the device did not reply (it may already be configured).';
+    } catch (e) {
+      status.textContent = `Failed: ${e.message}`;
+    } finally {
+      if (port) await port.close().catch(() => {});
+    }
+  });
+
+  const monitorButton = document.getElementById('monitor');
+  const log = document.getElementById('log');
+  let monitorPort;
+  let monitorReader;
+  let monitorStop;
+
+  function append(text) {
+    log.textContent += text;
+    if (log.textContent.length > 20000) log.textContent = log.textContent.slice(-20000);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function runMonitor() {
+    let waiting = false;
+    while (!monitorStop) {
+      try {
+        await monitorPort.open({ baudRate: 115200 });
+        waiting = false;
+        append('Connected.\n');
+        const reader = monitorPort.readable.getReader();
+        monitorReader = reader;
+        const decoder = new TextDecoder();
+        while (!monitorStop) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          append(decoder.decode(value, { stream: true }));
+        }
+        monitorReader = undefined;
+        await reader.cancel().catch(() => {});
+      } catch (e) {
+        if (!waiting) append('Waiting for the board...\n');
+        waiting = true;
+      }
+      await monitorPort.close().catch(() => {});
+      if (!monitorStop) await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    await monitorPort.close().catch(() => {});
+    append('Monitor stopped.\n');
+    monitorButton.textContent = 'Start monitor';
+  }
+
+  monitorButton.addEventListener('click', async () => {
+    if (monitorStop) {
+      monitorStop = true;
+      if (monitorReader) await monitorReader.cancel().catch(() => {});
+      return;
+    }
+    if (!('serial' in navigator)) {
+      append('This browser exposes no Web Serial (Chrome, Edge, Firefox 151+).\n');
+      return;
+    }
+    try {
+      monitorPort = await navigator.serial.requestPort();
+    } catch (e) {
+      append(`No port selected: ${e.message}\n`);
+      return;
+    }
+    monitorStop = false;
+    monitorButton.textContent = 'Stop monitor';
+    append('Connecting...\n');
+    runMonitor();
+  });
+</script>
+</body>
+</html>

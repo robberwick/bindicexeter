@@ -1,0 +1,128 @@
+# bindicexeter
+
+Exeter City Council bin collection display firmware for a Wemos/LOLIN S2 Mini (ESP32-S2FH4, 4 MB flash) driving
+a 2.9" GDEM029C90 tri-colour e-paper panel (128x296).
+
+The device fetches the council's own bin-date data, parses the HTML fragment it returns, and draws the schedule on
+the panel. There is no server, no API key, no WiFiManager portal and no OTA. Configuration lives in a LittleFS file,
+or arrives over USB serial on first boot. Between updates the ESP32 deep-sleeps.
+
+Data source (UPRN lookup, JSON array with an HTML `Results` fragment):
+
+```
+https://exeter.gov.uk/repositories/hidden-pages/address-finder/?qsource=UPRN&qtype=bins&term=<UPRN>
+```
+
+## Wiring
+
+The display's MISO line is not connected, so SPI runs 3-wire with an explicit bus setup (`SPI.begin(7, -1, 11, 12)`).
+
+| Display | Harness colour | S2 GPIO |
+| ------- | -------------- | ------- |
+| BUSY    | Purple         | 9       |
+| RST     | Orange         | 35      |
+| DC      | White          | 33      |
+| CS      | Blue           | 12      |
+| SCK     | Green          | 7       |
+| MOSI    | Yellow         | 11      |
+| GND     | Black          | GND     |
+| VCC     | Red            | 3V3     |
+
+Do not connect display VCC to VBUS.
+
+## Configuration
+
+Copy the example and fill in your own values:
+
+```bash
+cp data/config.example.json data/config.json
+```
+
+```json
+{
+  "wifi_ssid": "YOUR_SSID",
+  "wifi_password": "YOUR_PASSWORD",
+  "uprn": "100040223370",
+  "production_mode": true
+}
+```
+
+`data/config.json` is git-ignored and is uploaded to LittleFS, never compiled in. The same JSON can be sent over
+USB serial (see below) instead of building a filesystem image.
+
+- `uprn` - the Unique Property Reference Number for the address, 10-15 digits.
+- `production_mode` - `true` sleeps for 3 hours between updates; `false` sleeps 20 seconds for bench testing and adds
+  a `DEV` marker to the footer.
+
+To find a UPRN, query the address finder with the URL-encoded address:
+
+```
+https://exeter.gov.uk/repositories/hidden-pages/address-finder/?qtype=bins&term=<url-encoded-address>
+```
+
+The matching entry in the JSON array carries the `UPRN` field.
+
+## Build and flash
+
+```bash
+pio run -e esp32-s2 -t uploadfs     # LittleFS image (data/)
+pio run -e esp32-s2 -t upload       # firmware
+pio device monitor -e esp32-s2
+```
+
+Run the parser tests on the host (no hardware needed):
+
+```bash
+pio test -e native
+```
+
+## Flash a GitHub build (no toolchain, no checkout)
+
+Every push to `main`, every pull request and every `v*` tag is built by `.github/workflows/firmware.yml`.
+Branches, tags and PRs from this repository are published to GitHub Pages:
+<https://robberwick.github.io/bindicexeter/>. Open that page in Chrome, Edge or Firefox 151+ on the Windows
+laptop, choose the build (`main`, `pr-123`, a branch or tag name), plug in the board and press Install. The
+manifest carries the ESP32-S2 image.
+
+The published image is the bootloader, partition table and app merged into one file written at `0x0`, so an
+existing LittleFS (and the WiFi/UPRN config on it) is left alone. Leave "Erase device" unchecked in the install
+dialog to keep it.
+
+On a blank board there is no filesystem: the firmware formats one on first boot and then waits up to five minutes
+on USB serial for config. Fill in the "Device config" form on the same page and press "Send config over USB" — the
+board saves it and carries on booting. To change the config later, install again with "Erase device" checked and
+send it again. No `uploadfs`, esptool or checkout needed.
+
+Caveats:
+
+- The flasher page is static HTML (`flasher/index.html`) plus one `<ref>/` directory on the `gh-pages` branch.
+  One-time repo setup: Settings > Pages > Deploy from a branch > `gh-pages` / `(root)`.
+- Pull requests from forks can only push an artifact (read-only token); download `firmware.bin` from the run
+  and flash it with `esptool.py --chip esp32s2 write_flash 0x0 firmware.bin`.
+
+## Behaviour
+
+Boot: mount LittleFS, load config, join WiFi, sync NTP, fetch the JSON, parse the `Results` fragment, draw, hibernate,
+cut WiFi, deep sleep.
+
+On the display, collections are grouped by date and headed with a relative label when the clock is known:
+
+- `OVERDUE - Tue 10 Nov`, `TODAY - Tue 10 Nov`, `TOMORROW - Tue 10 Nov`, `IN 8 DAYS - Tue 17 Nov`
+- Headers are red when the collection is today or tomorrow (or overdue), black otherwise.
+- The footer shows `Updated HH:MM` (`Updated HH:MM DEV` in development mode), or `Clock not synced`.
+
+If NTP is unavailable the device still draws the schedule, using absolute dates (`Tue 10 Nov`) and a
+`Clock not synced` footer.
+
+Sleep intervals: 3 hours in production, 20 seconds in development, 300 seconds after any error screen
+(`LittleFS mount failed`, `config.json missing`, `WiFi connect failed`, `HTTP <code>`, `Bad response`,
+`No collections parsed`, ...).
+
+## Caveats
+
+- The parser is coupled to Exeter's current `<h2>`/`<h3>` structure. If the council changes the markup the device shows
+  `No collections parsed`; update `lib/schedule/ScheduleParser.cpp` and the fixture in `test/test_parser` rather than
+  adding a server.
+- TLS uses `setInsecure()`: the endpoint is public read-only data and, with no OTA, a pinned CA would strand the device
+  after a certificate rotation.
+- Garden waste only appears when the property is subscribed to the charged garden-waste service.
