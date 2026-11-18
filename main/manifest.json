@@ -1,11 +1,11 @@
 {
   "name": "bindicexeter main",
-  "version": "5130bf6",
+  "version": "86d000c",
   "new_install_prompt_erase": true,
   "builds": [
     {
       "chipFamily": "ESP32-S2",
-      "parts": [{ "path": "firmware.bin?v=5130bf6", "offset": 0 }]
+      "parts": [{ "path": "firmware.bin?v=86d000c", "offset": 0 }]
     }
   ]
 }
