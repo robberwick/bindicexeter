@@ -108,7 +108,7 @@ cut WiFi, deep sleep.
 On the display, collections are grouped by date and headed with a relative label when the clock is known:
 
 - `OVERDUE - Tue 10 Nov`, `TODAY - Tue 10 Nov`, `TOMORROW - Tue 10 Nov`, `IN 8 DAYS - Tue 17 Nov`
-- Headers are red when the collection is today or tomorrow (or overdue), black otherwise.
+- Headers and the rule under them are red when the collection is today or tomorrow (or overdue), black otherwise.
 - The footer shows `Updated HH:MM` (`Updated HH:MM DEV` in development mode), or `Clock not synced`.
 
 If NTP is unavailable the device still draws the schedule, using absolute dates (`Tue 10 Nov`) and a

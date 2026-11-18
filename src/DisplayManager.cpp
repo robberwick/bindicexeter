@@ -1,6 +1,6 @@
 #include "DisplayManager.h"
 
-#include <Fonts/FreeMonoBold9pt7b.h>
+#include <Fonts/FreeMono9pt7b.h>
 #include <SPI.h>
 
 #include <algorithm>
@@ -133,7 +133,7 @@ void DisplayManager::showSchedule(const std::vector<Collection>& bins, bool have
   display->firstPage();
   do {
     display->fillScreen(GxEPD_WHITE);
-    display->setFont(&FreeMonoBold9pt7b);
+    display->setFont(&FreeMono9pt7b);
 
     int16_t y = 2;
     size_t index = 0;
@@ -163,7 +163,7 @@ void DisplayManager::showSchedule(const std::vector<Collection>& bins, bool have
       display->print(fitText(headerText(head, haveClock), usableWidth));
 
       y += kHeaderAdvance;
-      display->drawLine(kLeftMargin, y, right, y, GxEPD_BLACK);
+      display->drawLine(kLeftMargin, y, right, y, headerColour);
       y += kRuleGap;
 
       display->setTextColor(GxEPD_BLACK);
@@ -177,9 +177,11 @@ void DisplayManager::showSchedule(const std::vector<Collection>& bins, bool have
       index = end;
     }
 
+    // The built-in 5x7 font draws downwards from the cursor, unlike GFX fonts
+    // which sit on a baseline; 10 px keeps its 8 px cell inside the panel.
     display->setFont(nullptr);
     display->setTextColor(GxEPD_BLACK);
-    display->setCursor(kLeftMargin, panelHeight - 3);
+    display->setCursor(kLeftMargin, panelHeight - 10);
     display->print(fitText(footerText(haveClock, updated, production), usableWidth));
   } while (display->nextPage());
 
@@ -205,7 +207,7 @@ void DisplayManager::showError(const char* message) {
   display->firstPage();
   do {
     display->fillScreen(GxEPD_WHITE);
-    display->setFont(&FreeMonoBold9pt7b);
+    display->setFont(&FreeMono9pt7b);
     display->setTextColor(GxEPD_BLACK);
     display->setCursor(kLeftMargin, 40);
     display->print("Error");
